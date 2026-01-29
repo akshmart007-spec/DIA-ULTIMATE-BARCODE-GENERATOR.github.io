@@ -1,0 +1,269 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>DIA Ultimate Barcode & QR Generator — FULL</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+
+<style>
+:root{--bg:#0e1117;--panel:#161b22;--border:#30363d;--text:#e6edf3;--muted:#8b949e;--accent:#2f81f7}
+body{margin:0;font-family:Arial;background:var(--bg);color:var(--text)}
+header{padding:14px 18px;border-bottom:1px solid var(--border)}
+.wrap{display:grid;grid-template-columns:380px 1fr;gap:12px;padding:12px}
+@media(max-width:900px){.wrap{grid-template-columns:1fr}}
+.panel{background:var(--panel);border:1px solid var(--border);border-radius:12px}
+.panel h2{margin:0;padding:10px;font-size:14px;border-bottom:1px solid var(--border)}
+.content{padding:12px}
+label{font-size:12px;color:var(--muted);margin-top:8px;display:block}
+input,select,textarea{width:100%;padding:7px;border-radius:8px;border:1px solid var(--border);background:#0d1117;color:#fff}
+textarea{min-height:80px}
+.row{display:grid;grid-template-columns:1fr 1fr;gap:6px}
+.row3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px}
+button{margin-top:8px;padding:8px;border:none;border-radius:8px;cursor:pointer;font-weight:600}
+.primary{background:#238636;color:#fff}
+.warn{background:#d29922;color:#000}
+.share{background:#0969da;color:#fff}
+.grid{display:grid;gap:10px;justify-content:center}
+.card{background:#0d1117;border:1px solid var(--border);border-radius:10px;padding:8px;text-align:center}
+canvas{max-width:100%}
+.badge{font-size:12px;color:#58a6ff;margin-top:6px}
+#scannerOverlay{position:fixed;inset:0;background:rgba(0,0,0,.85);display:none;align-items:center;justify-content:center;flex-direction:column;z-index:9999}
+#scannerContainer{width:300px}
+</style>
+
+<script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.6/dist/JsBarcode.all.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
+<script src="https://unpkg.com/html5-qrcode/minified/html5-qrcode.min.js"></script>
+</head<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#0e1117">
+>
+<script>
+if ("serviceWorker" in navigator) {
+  navigator.serviceWorker.register("sw.js");
+}
+</script>
+
+<body>
+<header>
+<h2>DIA Ultimate Barcode & QR Generator — FULL FEATURE</h2>
+</header>
+
+<div class="wrap">
+<div class="panel">
+<h2>Controls</h2>
+<div class="content">
+
+<label>Mode</label>
+<select id="mode">
+<option value="barcode">Barcode</option>
+<option value="qr">QR</option>
+<option value="combo">Barcode + QR</option>
+</select>
+
+<label>Data</label>
+<textarea id="data"></textarea>
+<input type="file" id="csvFile" accept=".csv">
+<div class="badge" id="count">Total: 0</div>
+
+<label>Prefix</label><input id="prefix">
+<div class="row">
+<input type="number" id="start" value="1">
+<select id="auto"><option value="on">Auto ON</option><option value="off">Auto OFF</option></select>
+</div>
+<label>Suffix</label><input id="suffix">
+
+<hr>
+
+<label>Barcode Type</label>
+<select id="type">
+<option>CODE128</option>
+<option>CODE39</option>
+<option>EAN13</option>
+<option>EAN8</option>
+<option>UPC</option>
+<option>ITF</option>
+</select>
+
+<div class="row3">
+<input id="fontSize" type="number" value="14">
+<select id="bold"><option value="">Normal</option><option value="bold">Bold</option></select>
+<select id="pos"><option value="bottom">Bottom</option><option value="top">Top</option><option value="hide">Hide</option></select>
+</div>
+
+<div class="row">
+<input id="bw" type="number" value="2">
+<input id="bh" type="number" value="70">
+</div>
+
+<hr>
+
+<label>Logo</label>
+<input type="file" id="logoFile" accept="image/*">
+<div class="row">
+<input id="logoScale" type="number" value="0.3" step="0.05">
+<input id="logoOpacity" type="number" value="0.9" step="0.05">
+</div>
+<select id="logoShape"><option value="square">Square</option><option value="circle">Circle</option></select>
+
+<hr>
+
+<div class="row">
+<button class="warn" id="pdf">PDF</button>
+<button class="primary" onclick="window.print()">Print</button>
+</div>
+
+<div class="row">
+<button class="share" id="share">Share</button>
+<button class="share" id="shareWA">WhatsApp</button>
+<button class="share" id="shareTG">Telegram</button>
+</div>
+
+<div class="row">
+<button class="primary" id="csvDownload">Download CSV</button>
+<button class="primary" id="scannerBtn">Scanner</button>
+<button class="primary" id="thermalPrint">Thermal</button>
+</div>
+
+</div>
+</div>
+
+<div class="panel">
+<h2>Preview</h2>
+<div class="content">
+<div id="grid" class="grid"></div>
+</div>
+</div>
+</div>
+
+<div id="scannerOverlay">
+<div id="scannerContainer"></div>
+<button class="primary" id="scannerClose">Close</button>
+</div>
+
+<script>
+/* ========= CORE ========= */
+const el=i=>document.getElementById(i);
+let logoData=null,scan=[],scanner=null;
+
+/* CSV */
+el('csvFile').onchange=e=>{
+ const r=new FileReader();
+ r.onload=x=>{el('data').value=x.target.result.trim();render();}
+ r.readAsText(e.target.files[0]);
+};
+
+el('csvDownload').onclick=()=>{
+ const blob=new Blob([values().join('\n')],{type:'text/csv'});
+ const a=document.createElement('a');
+ a.href=URL.createObjectURL(blob);a.download='data.csv';a.click();
+};
+
+/* Values */
+function values(){
+ let n=+el('start').value||1;
+ return el('data').value.split(/\n/).filter(Boolean).map(v=>{
+  let base=el('auto').value==='on'?n++:v;
+  return el('prefix').value+base+el('suffix').value;
+ });
+}
+
+/* Logo */
+el('logoFile').onchange=e=>{
+ const r=new FileReader();
+ r.onload=x=>{logoData=x.target.result;render();}
+ r.readAsDataURL(e.target.files[0]);
+};
+
+async function drawLogo(ctx,c){
+ if(!logoData)return;
+ const img=new Image();img.src=logoData;await img.decode();
+ const s=c.width*+el('logoScale').value,x=(c.width-s)/2,y=(c.height-s)/2;
+ ctx.save();ctx.globalAlpha=+el('logoOpacity').value;
+ if(el('logoShape').value==='circle'){
+  ctx.beginPath();ctx.arc(c.width/2,c.height/2,s/2,0,Math.PI*2);ctx.clip();
+ }
+ ctx.drawImage(img,x,y,s,s);ctx.restore();
+}
+
+/* Render */
+async function render(){
+ el('grid').innerHTML='';
+ const arr=values();
+ el('count').textContent='Total: '+arr.length;
+
+ for(const v of arr){
+  const card=document.createElement('div');card.className='card';
+  const c=document.createElement('canvas');c.width=260;c.height=260;
+  const ctx=c.getContext('2d');
+
+  if(el('mode').value!=='qr'){
+   JsBarcode(c,v,{format:el('type').value,fontSize:+el('fontSize').value,
+    fontOptions:el('bold').value,textPosition:el('pos').value,
+    width:+el('bw').value,height:+el('bh').value});
+  }
+
+  if(el('mode').value!=='barcode'){
+   const t=document.createElement('div');
+   new QRCode(t,{text:v,width:140,height:140});
+   await new Promise(r=>setTimeout(r,10));
+   ctx.drawImage(t.querySelector('canvas'),60,80);
+  }
+
+  await drawLogo(ctx,c);
+  card.appendChild(c);el('grid').appendChild(card);
+ }
+}
+
+/* Share */
+el('share').onclick=()=>navigator.share?.({text:values().join('\n')});
+el('shareWA').onclick=()=>open('https://wa.me/?text='+encodeURIComponent(values().join('\n')));
+el('shareTG').onclick=()=>open('https://t.me/share/url?text='+encodeURIComponent(values().join('\n')));
+
+/* Scanner */
+el('scannerBtn').onclick=()=>{
+ el('scannerOverlay').style.display='flex';
+ scanner=new Html5Qrcode('scannerContainer');
+ scanner.start({facingMode:'environment'},{fps:10,qrbox:250},t=>{
+  if(scan.includes(t))return;
+  scan.push(t);el('data').value+=t+'\n';render();
+ });
+};
+el('scannerClose').onclick=()=>{
+ el('scannerOverlay').style.display='none';
+ scanner?.stop().then(()=>scanner.clear());
+};
+
+/* Thermal */
+el('thermalPrint').onclick=()=>{
+ const w=open('','_blank');
+ w.document.write(el('grid').innerHTML);
+ w.print();
+};
+
+/* PDF */
+el('pdf').onclick=()=>{
+ const {jsPDF}=window.jspdf;
+ const pdf=new jsPDF();
+ let y=10;
+ document.querySelectorAll('canvas').forEach(c=>{
+  pdf.addImage(c.toDataURL(),'PNG',10,y,50,50);y+=55;
+  if(y>270){pdf.addPage();y=10;}
+ });
+ pdf.save('codes.pdf');
+};
+
+document.querySelectorAll('input,select,textarea').forEach(i=>i.oninput=render);
+render();
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#238636">
+
+</script>
+<script>
+if ("serviceWorker" in navigator) {
+  navigator.serviceWorker.register("service-worker.js");
+}
+</script>
+
+</body>
+</html>
